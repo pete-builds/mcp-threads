@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.in
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Tests
+        env:
+          THREADS_APP_ID: test-app
+          THREADS_APP_SECRET: test-secret
+        run: pytest -q
+
+      - name: Import smoke (server wires up without a credential)
+        env:
+          THREADS_APP_ID: test-app
+          THREADS_APP_SECRET: test-secret
+          THREADS_DATA_DIR: /tmp/threads-data
+        run: |
+          python -c "
+          import asyncio, server
+          tools = asyncio.run(server.mcp.list_tools())
+          names = sorted(t.name for t in tools)
+          assert len(names) == 13, names
+          print('tools:', names)
+          "
+
+  scan:
+    name: Trivy filesystem scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # gitleaks scans history, not just the tip
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+      # The scan above is only trustworthy if it can fail. Plant a synthetic
+      # Threads-shaped token, assert the ruleset catches it, then remove it.
+      # A scan harness without a positive control proves nothing.
+      - name: Install gitleaks for the control check
+        run: |
+          set -euo pipefail
+          VER=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Positive control (the scanner must detect a planted token)
+        run: |
+          set -euo pipefail
+          trap 'rm -f _positive_control.py' EXIT
+          TOKEN="THA$(head -c 300 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 200)"
+          printf 'PLANTED = "%s"\n' "$TOKEN" > _positive_control.py
+          if gitleaks dir . -c .gitleaks.toml --no-banner --redact 2>&1 | grep -q "no leaks found"; then
+            echo "::error::Positive control FAILED: gitleaks did not detect a planted Threads-shaped token. The scan is blind, so the clean result above means nothing."
+            exit 1
+          fi
+          echo "Positive control passed: the planted token was detected."

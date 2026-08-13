@@ -1,0 +1,9 @@
+fastmcp==3.4.4
+httpx==0.28.1
+uvicorn==0.51.0
+python-dotenv==1.2.2
+pydantic==2.13.4
+pydantic-settings==2.14.1
+# Pinned to an immutable commit tarball until pete-mcp-core is on PyPI.
+# Revert to a normal pinned version once it publishes.
+pete-mcp-core @ https://github.com/pete-builds/pete-mcp-core/archive/15d210625cfcf1840b6b6e95cf10990214585104.tar.gz

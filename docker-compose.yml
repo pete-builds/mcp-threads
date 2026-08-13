@@ -1,0 +1,55 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mcp-threads:
+    # No GHCR image published yet (no repo). Build from source on the host.
+    # Once ghcr.io/pete-builds/mcp-threads:0.2.0 exists, drop `build:` and
+    # pull the published multi-arch image instead.
+    build: .
+    image: mcp-threads:0.2.0
+    container_name: mcp-threads
+    restart: unless-stopped
+    # Host networking: the nix1 Docker bridge IP pool is exhausted. On any
+    # other host, drop this and use `ports: ["3726:3726"]` instead.
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "3726"
+      MCP_TRANSPORT: streamable-http
+      # Container liveness only. Deliberately NOT /mcp: a bare GET /mcp makes
+      # the MCP SDK create a transport session that is never reaped (~40 KB a
+      # request, ~115 MiB/day at this interval). /healthz is a plain custom
+      # route with no session. `healthcheck.py` treats 503 as alive, so a
+      # near-expiry or unseeded token still reports healthy — a restart cannot
+      # renew a token, and failing here would drop the MCP transport *because*
+      # the server warned. Uptime Kuma polls /healthz for the credential state.
+      MCP_HEALTH_PATH: /healthz
+      THREADS_DATA_DIR: /data
+      TZ: "${TZ:-America/New_York}"
+    volumes:
+      # The long-lived Threads token lives HERE, not in .env. Every refresh
+      # replaces it. Deleting this volume kills the credential permanently and
+      # forces a bootstrap.py re-run.
+      - threads-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  threads-data:
+    name: threads-data

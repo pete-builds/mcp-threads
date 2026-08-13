@@ -1,0 +1,57 @@
+# gitleaks configuration for mcp-threads
+#
+# This repo handles a live posting credential, so the scan is deliberately strict
+# and the exceptions below are narrow ON PURPOSE: each allowlist matches an exact
+# literal, never a whole file. A real secret landing in server.py or in the test
+# suite still trips the scan.
+#
+# Positive control (run this before trusting a clean result):
+#   the scanner is verified against a real credential by scanning an untracked
+#   .env holding a live 207-char Threads token. `gitleaks dir .` must report that
+#   finding. If a scan of the working tree with a populated .env comes back clean,
+#   the harness is broken, not the repo. A scan that cannot fail proves nothing.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Python keyword arguments that the generic-api-key heuristic reads as assignments.
+No secret material: these are parameter names in the client constructor call.
+"""
+regexes = [
+  '''granted_scopes=_granted''',
+]
+
+[[allowlists]]
+description = """
+Fixture tokens in the redaction test suite. These are the fake credentials the
+redaction tests assert are scrubbed from log output, so they MUST appear in the
+source. They are 23 and 29 characters; a real Threads long-lived token is ~207.
+
+Matched as EXACT literals with no `paths` entry, deliberately. An earlier version
+allowlisted the whole file and a live token planted in it was silently suppressed.
+Allowlist the string, never the file.
+"""
+regexes = [
+  '''THQVJabc123DEFghi456JKLmno789''',
+  '''THQbrandnew999888777666''',
+]
+
+# ---------------------------------------------------------------------------
+# Custom rule: Meta Threads access token
+#
+# Why this exists: gitleaks' built-in generic-api-key did NOT catch a real
+# 207-character Threads token assigned in a .py file. It only caught it in .env,
+# via the KEY=value form. Verified by planting a live token in two probe files
+# and watching the default ruleset miss both.
+#
+# A repo whose whole purpose is holding this credential cannot rely on a scanner
+# that is blind to it. Real long-lived tokens observed at ~207 chars with THA/THQ
+# prefixes; the redaction fixtures are 23 and 29 chars and sit below the floor.
+# ---------------------------------------------------------------------------
+[[rules]]
+id = "threads-access-token"
+description = "Meta Threads long-lived access token"
+regex = '''\bTH[A-Za-z0-9_\-]{48,}'''
+keywords = ["th"]
