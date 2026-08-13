@@ -186,6 +186,11 @@ Register with an MCP client:
 claude mcp add threads --transport http --scope user --url http://<host>:3726/mcp
 ```
 
+Then **start a new session**. MCP clients enumerate tools at startup, so a
+session that was already open when you registered the server will report
+`✔ Connected` and still expose none of its tools. That looks like a broken
+server and is not one.
+
 ### Configuration
 
 | Variable | Default | Purpose |
