@@ -6,11 +6,17 @@ x-logging: &default-logging
 
 services:
   mcp-threads:
-    # No GHCR image published yet (no repo). Build from source on the host.
-    # Once ghcr.io/pete-builds/mcp-threads:0.2.0 exists, drop `build:` and
-    # pull the published multi-arch image instead.
-    build: .
-    image: mcp-threads:0.2.0
+    # Pull the published multi-arch image. release.yml builds and pushes it on
+    # every v*.*.* tag, with sbom, provenance and a registry attestation.
+    #
+    # This tag is the only version surface in the repo, and release.yml fails
+    # closed if it does not match the tag being released: bump it in a commit
+    # BEFORE cutting the tag, never after.
+    #
+    # To build from source instead, comment out `image:` and uncomment
+    # `build: .` locally.
+    image: ghcr.io/pete-builds/mcp-threads:0.2.0
+    # build: .
     container_name: mcp-threads
     restart: unless-stopped
     # Host networking: the nix1 Docker bridge IP pool is exhausted. On any
