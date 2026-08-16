@@ -68,6 +68,12 @@ jobs:
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITLEAKS_CONFIG: .gitleaks.toml
+          # Required on pull_request events, and only there. Without it the
+          # action aborts before scanning anything: "GITHUB_TOKEN is now
+          # required to scan pull requests." Every PR in this repo failed this
+          # job while every push to main passed, so the scan was silently
+          # main-only and the red X on each PR meant nothing was checked.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # The scan above is only trustworthy if it can fail. Plant a synthetic
       # Threads-shaped token, assert the ruleset catches it, then remove it.
       # A scan harness without a positive control proves nothing.
