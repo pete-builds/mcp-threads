@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-threads"
-version = "0.2.1"
+version = "0.2.2"
 description = "MCP server for Meta's Threads API. Two-step publishing, byte-accurate chain splitting, and a long-lived credential that refreshes itself onto a durable volume."
 readme = "README.md"
 license = { file = "LICENSE" }

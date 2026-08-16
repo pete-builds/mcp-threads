@@ -15,7 +15,7 @@ services:
     #
     # To build from source instead, comment out `image:` and uncomment
     # `build: .` locally.
-    image: ghcr.io/pete-builds/mcp-threads:0.2.0
+    image: ghcr.io/pete-builds/mcp-threads:0.2.2
     # build: .
     container_name: mcp-threads
     restart: unless-stopped
