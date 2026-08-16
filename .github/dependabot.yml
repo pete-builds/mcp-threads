@@ -53,3 +53,14 @@ updates:
   commit-message:
     prefix: deps
     include: scope
+  ignore:
+  # A base-image version jump is a coordinated change, not a dependency bump:
+  # the Dockerfile FROM tag and requirements.lock (--python-version) have to
+  # move together. Dependabot moves only the first, and it reads as noise in
+  # review, which is how Python 3.14 shipped against 3.13 lockfiles elsewhere
+  # in this fleet. Digest refreshes and patch bumps still flow, so security
+  # rebuilds are kept.
+  - dependency-name: python
+    update-types:
+    - version-update:semver-major
+    - version-update:semver-minor
