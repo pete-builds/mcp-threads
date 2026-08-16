@@ -23,18 +23,18 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "fastmcp>=3.4.4",
+    "fastmcp>=3.4.7",
     "httpx>=0.28.1",
-    "uvicorn>=0.51.0",
+    "uvicorn>=0.52.2",
     "python-dotenv>=1.2.2",
     "pydantic>=2.13.4",
-    "pydantic-settings>=2.14.2",
+    "pydantic-settings>=2.15.0",
     # Pinned to an immutable commit tarball until pete-mcp-core is on PyPI.
     "pete-mcp-core @ https://github.com/pete-builds/pete-mcp-core/archive/15d210625cfcf1840b6b6e95cf10990214585104.tar.gz",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=9.1.1", "pytest-asyncio>=1.4.0", "respx>=0.23.1", "ruff>=0.15.21"]
+dev = ["pytest>=9.1.1", "pytest-asyncio>=1.4.0", "respx>=0.23.1", "ruff>=0.16.2"]
 
 [project.scripts]
 mcp-threads = "server:main"
