@@ -5,11 +5,11 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from clients.threads import ThreadsClient
-from tools.common import ok, tool_guard
+from tools.common import READ_ONLY, ok, tool_guard
 
 
 def register_read_tools(mcp: FastMCP, client: ThreadsClient) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     @tool_guard
     async def list_posts(limit: int = 10) -> str:
         """List recent posts on the authenticated profile, newest first.
@@ -28,7 +28,7 @@ def register_read_tools(mcp: FastMCP, client: ThreadsClient) -> None:
         posts = await client.list_posts(limit)
         return ok({"count": len(posts), "posts": posts})
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     @tool_guard
     async def get_replies(media_id: str, all_depths: bool = False) -> str:
         """List replies to a post.
