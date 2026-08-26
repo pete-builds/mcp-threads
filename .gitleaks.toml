@@ -36,11 +36,6 @@ Allowlist the string, never the file.
 regexes = [
   '''THQVJabc123DEFghi456JKLmno789''',
   '''THQbrandnew999888777666''',
-  # 50 chars, so unlike the two above it clears the 48-char floor of the custom
-  # rule below and trips it. Still an obvious fake: it spells out what it is.
-  # Listed as an exact literal for the same reason as its neighbours -- a real
-  # token planted in this file must still be caught.
-  '''THQmaB1sIsAnExampleLongLivedThreadsToken0123456789''',
 ]
 
 # ---------------------------------------------------------------------------
