@@ -42,6 +42,7 @@ from clients.insights import (
 )
 from clients.media import validate_alt_text, validate_image_url
 from clients.quota import FIELD_SET_CANDIDATES, QuotaGate, parse_publishing_limit
+from clients.redact import redact_secrets
 from clients.text import (
     THREADS_LINK_LIMIT,
     THREADS_TEXT_LIMIT,
@@ -429,7 +430,33 @@ class ThreadsClient:
             body = {}
         err = body.get("error", {}) if isinstance(body, dict) else {}
         upstream_code = err.get("error_user_title") or err.get("code")
-        message = err.get("message") or resp.text[:300] or "unknown error"
+        # Two changes here, and they close the same gap from opposite sides.
+        #
+        # The raw-body fallback is gone. This client sends the access token as
+        # a QUERY PARAMETER -- the module docstring says so, and log redaction
+        # exists precisely because of it -- so a body that is not the documented
+        # JSON envelope can contain the request line, token and all. That is
+        # every edge failure: a CDN error page, a redirect notice, a
+        # maintenance interstitial. Reporting the body's shape instead is
+        # enough to tell "Meta rejected this" from "something in front of Meta
+        # answered", and forwards nothing.
+        #
+        # And Meta's own `message` is redacted before it goes anywhere. It is
+        # the documented field, but it is still upstream text that can quote
+        # the request back, and redact_secrets already knows every shape this
+        # repo's credentials take. It was installed on the LOG path and never
+        # on the path that reaches the agent, which is the narrower and more
+        # exposed of the two.
+        if err.get("message"):
+            message = redact_secrets(str(err["message"]))[:300]
+        elif resp.text:
+            message = (
+                f"non-JSON upstream response "
+                f"({resp.headers.get('content-type', 'unknown')}, "
+                f"{len(resp.text)} bytes)"
+            )
+        else:
+            message = "unknown error"
         details = {
             "status": resp.status_code,
             "upstream_code": upstream_code,
