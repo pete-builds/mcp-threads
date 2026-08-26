@@ -21,7 +21,7 @@ jobs:
     name: Build + Push image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Verify docker-compose.yml points at the version being released
         # The pinned tag in docker-compose.yml is the only version surface in
