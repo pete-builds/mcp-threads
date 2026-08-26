@@ -12,11 +12,11 @@ from fastmcp import FastMCP
 from clients.chain import publish_chain
 from clients.text import count_unique_links, split_for_chain, threads_length
 from clients.threads import ThreadsClient, ThreadsInputError
-from tools.common import ok, tool_guard
+from tools.common import CREATE, DESTRUCTIVE, READ_ONLY, READ_ONLY_LOCAL, ok, tool_guard
 
 
 def register_publish_tools(mcp: FastMCP, client: ThreadsClient) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=CREATE)
     @tool_guard
     async def create_post(
         text: str | None = None,
@@ -92,7 +92,7 @@ def register_publish_tools(mcp: FastMCP, client: ThreadsClient) -> None:
             )
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     @tool_guard
     async def get_container_status(container_id: str) -> str:
         """Check whether a container is ready to publish. Read-only.
@@ -122,7 +122,7 @@ def register_publish_tools(mcp: FastMCP, client: ThreadsClient) -> None:
         """
         return ok(await client.get_container_status(container_id))
 
-    @mcp.tool()
+    @mcp.tool(annotations=CREATE)
     @tool_guard
     async def publish_post(creation_id: str, is_reply: bool | None = None) -> str:
         """Publish a container created by create_post. This goes live.
@@ -151,7 +151,7 @@ def register_publish_tools(mcp: FastMCP, client: ThreadsClient) -> None:
         """
         return ok(await client.publish_container(creation_id, is_reply=is_reply))
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY_LOCAL)
     @tool_guard
     async def preview_chain(
         text: str,
@@ -206,7 +206,7 @@ def register_publish_tools(mcp: FastMCP, client: ThreadsClient) -> None:
             }
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=CREATE)
     @tool_guard
     async def post_chain(
         text: str,
@@ -258,7 +258,7 @@ def register_publish_tools(mcp: FastMCP, client: ThreadsClient) -> None:
             )
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=DESTRUCTIVE)
     @tool_guard
     async def delete_post(media_id: str, confirm: bool = False) -> str:
         """Delete a published Threads post. DESTRUCTIVE and irreversible.

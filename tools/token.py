@@ -5,11 +5,11 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from clients.threads import ThreadsClient
-from tools.common import ok, tool_guard
+from tools.common import READ_ONLY, ok, tool_guard
 
 
 def register_token_tools(mcp: FastMCP, client: ThreadsClient) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     @tool_guard
     async def token_status() -> str:
         """Report Threads credential health without touching the API.
@@ -33,7 +33,7 @@ def register_token_tools(mcp: FastMCP, client: ThreadsClient) -> None:
         """
         return ok(await client.token_status())
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     @tool_guard
     async def whoami() -> str:
         """Return the authenticated Threads profile. Cheap connectivity check.

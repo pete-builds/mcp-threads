@@ -55,3 +55,15 @@ id = "threads-access-token"
 description = "Meta Threads long-lived access token"
 regex = '''\bTH[A-Za-z0-9_\-]{48,}'''
 keywords = ["th"]
+
+# Fixture token used by tests/test_redaction.py. Scoped to THIS rule and matched
+# as an exact literal, so every other rule still sees the file and a real token
+# planted here is still caught.
+#
+# Rule-scoped rather than added to the [[allowlists]] block above on purpose:
+# the pinned gitleaks in CI (8.24.3) does not honour that top-level array for
+# custom rules, so an entry there reads as a fix and silently is not one.
+[rules.allowlist]
+regexes = [
+  '''THQmaB1sIsAnExampleLongLivedThreadsToken0123456789''',
+]

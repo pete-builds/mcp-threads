@@ -5,11 +5,11 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from clients.threads import ThreadsClient
-from tools.common import ok, tool_guard
+from tools.common import READ_ONLY, ok, tool_guard
 
 
 def register_insight_tools(mcp: FastMCP, client: ThreadsClient) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     @tool_guard
     async def get_post_insights(media_id: str, metrics: list[str] | None = None) -> str:
         """Insights for a single Threads post.
@@ -37,7 +37,7 @@ def register_insight_tools(mcp: FastMCP, client: ThreadsClient) -> None:
         """
         return ok(await client.media_insights(media_id, metrics))
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     @tool_guard
     async def get_account_insights(
         metrics: list[str] | None = None,
