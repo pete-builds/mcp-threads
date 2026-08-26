@@ -124,7 +124,7 @@ def test_bearer_redaction_does_not_mangle_ordinary_prose():
 # is the narrower and more exposed of the two: a tool result goes straight into
 # an agent's context.
 
-TOKEN = "THQmaB1sExampleLongLivedToken00042"
+TOKEN = "THQmaB1sIsAnExampleLongLivedThreadsToken0123456789"
 
 
 def _error_for(body: str, content_type: str = "application/json"):
