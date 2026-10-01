@@ -6,7 +6,11 @@ FROM python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    # FastMCP 4 fetches https://pypi.org/pypi/fastmcp/json on every start to
+    # look for a newer release. Nothing in this container acts on the answer
+    # and the image is pinned by lockfile, so the call is pure egress. Off.
+    FASTMCP_CHECK_FOR_UPDATES=off
 
 # Hash-pinned lockfile. Regenerate with:
 #   uv pip compile requirements.in -o requirements.lock --generate-hashes --universal --python-version 3.13

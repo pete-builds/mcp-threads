@@ -36,11 +36,11 @@ async def test_every_tool_is_annotated(tools):
 
 async def test_deletion_is_marked_destructive(tools):
     for name in DESTRUCTIVE:
-        assert tools[name].annotations.destructiveHint is True, name
+        assert tools[name].annotations.destructive_hint is True, name
 
 
 async def test_public_writes_are_never_marked_read_only(tools):
-    mislabelled = [n for n in PUBLIC_WRITES if tools[n].annotations.readOnlyHint]
+    mislabelled = [n for n in PUBLIC_WRITES if tools[n].annotations.read_only_hint]
     assert mislabelled == []
 
 
@@ -52,20 +52,20 @@ async def test_publishing_is_not_idempotent(tools):
     visible to everyone who follows the account.
     """
     for name in PUBLIC_WRITES:
-        assert tools[name].annotations.idempotentHint is False, name
+        assert tools[name].annotations.idempotent_hint is False, name
 
 
 async def test_preview_chain_is_the_one_closed_world_tool(tools):
     """It segments text locally and makes no network call, and says so."""
     ann = tools["preview_chain"].annotations
-    assert ann.readOnlyHint is True
-    assert ann.openWorldHint is False
+    assert ann.read_only_hint is True
+    assert ann.open_world_hint is False
 
 
 async def test_every_other_tool_declares_an_open_world(tools):
     closed = [
         name for name, t in tools.items()
-        if name != "preview_chain" and t.annotations.openWorldHint is not True
+        if name != "preview_chain" and t.annotations.open_world_hint is not True
     ]
     assert closed == []
 
@@ -73,6 +73,6 @@ async def test_every_other_tool_declares_an_open_world(tools):
 async def test_no_tool_is_both_read_only_and_destructive(tools):
     contradictory = [
         name for name, t in tools.items()
-        if t.annotations.readOnlyHint and t.annotations.destructiveHint
+        if t.annotations.read_only_hint and t.annotations.destructive_hint
     ]
     assert contradictory == []
