@@ -16,6 +16,7 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
+import fastmcp
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from pete_mcp_core import build_auth_provider, configure_logging, run_server
@@ -167,7 +168,17 @@ register_publish_tools(mcp, client)
 register_health_route(mcp, client, version=VERSION)
 
 
+# Seconds an abandoned streamable-http session survives before the SDK reaps
+# it. FastMCP 4 hands the SDK session_idle_timeout=None unless this setting is
+# filled in, which overrides the SDK's own default and keeps every abandoned
+# session (~57 KB each, measured) in memory for the life of the process.
+# FASTMCP_HTTP_SESSION_IDLE_TIMEOUT still wins when an operator sets it.
+SESSION_IDLE_TIMEOUT = 1800.0
+
+
 def main() -> None:
+    if fastmcp.settings.http_session_idle_timeout is None:
+        fastmcp.settings.http_session_idle_timeout = SESSION_IDLE_TIMEOUT
     run_server(
         mcp,
         default_port=DEFAULT_PORT,
