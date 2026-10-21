@@ -27,14 +27,14 @@ dependencies = [
     "httpx>=0.28.1",
     "uvicorn>=0.54.0",
     "python-dotenv>=1.2.4",
-    "pydantic>=2.14.0",
-    "pydantic-settings>=2.15.0",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.0",
     # Pinned to an immutable commit tarball until pete-mcp-core is on PyPI.
     "pete-mcp-core @ https://github.com/pete-builds/pete-mcp-core/archive/15d210625cfcf1840b6b6e95cf10990214585104.tar.gz",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=9.1.1", "pytest-asyncio>=1.4.0", "respx>=0.23.1", "ruff>=0.17.0"]
+dev = ["pytest>=9.1.1", "pytest-asyncio>=1.4.0", "respx>=0.23.1", "ruff>=0.17.1"]
 
 [project.scripts]
 mcp-threads = "server:main"
