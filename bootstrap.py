@@ -3,7 +3,8 @@
 What it does:
 
   1. Opens the browser to Threads' authorization page.
-  2. Catches the redirect at http://127.0.0.1:8766/callback.
+  2. Catches the redirect at http://127.0.0.1:8766/callback, or — when that
+     listener cannot fire — takes the redirect URL pasted on stdin.
   3. Exchanges the authorization code for a **short-lived** token (1 hour).
   4. Exchanges that for a **long-lived** token (60 days).
   5. Prints the long-lived token to seed THREADS_SEED_TOKEN once.
@@ -13,6 +14,10 @@ Usage::
     export THREADS_APP_ID=...        # Meta App Dashboard
     export THREADS_APP_SECRET=...    # App settings > Basic > Threads App secret
     python bootstrap.py
+
+This script does **not** load ``.env``. It reads ``os.getenv`` directly, so
+``source .env`` (or export the three vars) before running it, or it exits at
+the first check with "set THREADS_APP_ID and THREADS_APP_SECRET in env".
 
 Prerequisite: the Threads app must have this exact redirect URI registered::
 
@@ -26,10 +31,30 @@ handler accepts ``/callback`` and ``/callback/`` so either registration works;
 if the dashboard shows a trailing slash, set ``THREADS_REDIRECT_URI`` to the
 dashboard's exact string.
 
-**Unverified:** every redirect-URI example in Meta's docs uses HTTPS. Whether
-the Threads use-case settings accept a plain-http loopback URI at all has not
-been confirmed. If the dashboard rejects ``http://127.0.0.1:8766/callback``,
-this flow needs an HTTPS tunnel or a hosted callback instead.
+**RESOLVED 2026-08-16: Meta rejects a plain-http loopback redirect URI.**
+Every redirect-URI example in Meta's docs uses HTTPS, and the authorize step
+fails with error ``1349187`` ("Insecure Login Blocked") for
+``http://127.0.0.1:8766/callback``. The working arrangement is an HTTPS URL on
+a host Pete controls — ``https://brooksnewmedia.com/threads-callback`` — which
+is registered in the dashboard and returns a plain 404 with **no redirect**,
+so the browser's address bar keeps ``?code=...&state=...`` intact. There is no
+callback route on that web server and there must not be one; the URL exists
+only to be a legal HTTPS landing spot whose query string can be copied.
+
+That means the local ``http.server`` listener can never fire in the normal
+case, so this script has a **manual paste fallback**::
+
+    export THREADS_REDIRECT_URI="https://brooksnewmedia.com/threads-callback"
+    python bootstrap.py
+    # authorize in the browser, land on the 404, copy the whole URL from the
+    # address bar, paste it at the prompt.
+
+The loopback listener remains the default path and is still tried first
+whenever ``THREADS_REDIRECT_URI`` is a loopback address, so nothing regresses
+if Meta ever allows one again. The pasted URL's ``state`` is compared against
+the value this run generated exactly as the listener path compares it; a
+mismatch aborts non-zero. Pasting a bare code instead of the full URL is
+accepted but says loudly that ``state`` could not be verified.
 
 Scopes requested (override with ``THREADS_SCOPES``): ``threads_basic``,
 ``threads_content_publish``, ``threads_read_replies``,
@@ -45,6 +70,12 @@ offers it but the authorize doc's scope list omits it, so if authorization is
 rejected with an invalid-scope error this script prints the exact
 ``THREADS_SCOPES`` fallback to re-run with. ``threads_manage_insights`` is
 deliberately omitted — insights are deferred past MVP.
+
+**RESOLVED 2026-08-16: ``threads_delete`` is NOT grantable.** Meta does not
+reject the authorize call over it; it silently drops the scope, and the
+resulting token's granted list comes back without it. The defensive fallback
+above stays in place because a silent drop is exactly the failure it makes
+legible, but do not expect ``delete_post`` to work: it is expected-to-403.
 
 Three different hosts are involved, which is not a typo:
 
@@ -67,14 +98,20 @@ import os
 import secrets
 import sys
 import threading
+import time
 import urllib.parse
 import urllib.request
 import webbrowser
 from datetime import UTC, datetime, timedelta
 
 PORT = 8766
-# Override if the App Dashboard rewrote the URI (e.g. added a trailing slash).
+# Override if the App Dashboard rewrote the URI (e.g. added a trailing slash),
+# or — the normal case since 2026-08-16 — because Meta refuses plain-http
+# loopback and the registered URI is https://brooksnewmedia.com/threads-callback.
 REDIRECT_URI = os.getenv("THREADS_REDIRECT_URI", f"http://127.0.0.1:{PORT}/callback")
+# How long to sit on the local listener before falling back to a manual paste.
+# Only consulted when REDIRECT_URI is a loopback address.
+CALLBACK_TIMEOUT = float(os.getenv("THREADS_CALLBACK_TIMEOUT", "180"))
 # The use-case dashboard exposes ten permissions; the authorize doc's "Values"
 # column lists only five and omits threads_delete entirely, which looks stale.
 # threads_delete is the gate on our delete_post tool, so we ask for it — but
@@ -142,6 +179,141 @@ def is_scope_error(error: str | None, description: str | None) -> bool:
     return "scope" in blob or "permission" in blob
 
 
+SCOPE_FALLBACK_HINT = (
+    "\nThis looks like an invalid-scope rejection, and the request\n"
+    "included `threads_delete` — a permission the use-case dashboard\n"
+    "offers but the authorize documentation does not list.\n\n"
+    "Re-run without it:\n\n"
+    f'    export THREADS_SCOPES="{FALLBACK_SCOPES}"\n'
+    "    python bootstrap.py\n\n"
+    "If that succeeds, `delete_post` will 403 at runtime. Either drop\n"
+    "it from the tool surface or document it as expected-to-fail —\n"
+    "do not ship a tool that silently does nothing."
+)
+
+_RESULT_KEYS = ("code", "state", "error", "error_description", "error_reason")
+
+
+def is_loopback_redirect(uri: str) -> bool:
+    """True if the redirect URI points back at this machine.
+
+    Only a loopback URI can ever reach the local ``http.server`` listener. A
+    hosted HTTPS callback (the arrangement Meta actually accepts) lands the
+    browser on a remote web server instead, so the listener would wait forever.
+    """
+    try:
+        host = urllib.parse.urlparse(uri).hostname
+    except ValueError:
+        return False
+    return (host or "").lower() in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
+
+
+def parse_pasted_redirect(text: str) -> dict:
+    """Parse a pasted redirect URL (or bare code) into the ``captured`` shape.
+
+    Accepts three spellings, because Pete is copying out of an address bar:
+
+    * a full URL — ``https://host/threads-callback?code=...&state=...``
+    * a bare query string — ``code=...&state=...``
+    * a bare authorization code with no ``=`` in it at all
+
+    The bare-code form sets ``bare_code`` so the caller can say out loud that
+    the CSRF ``state`` could not be checked. Meta appends a ``#_`` fragment to
+    the redirect; it is stripped rather than treated as part of the code.
+    """
+    out: dict = dict.fromkeys(_RESULT_KEYS)
+    out["bare_code"] = False
+
+    cleaned = (text or "").strip().strip("'\"").strip()
+    if not cleaned:
+        return out
+
+    parsed = urllib.parse.urlparse(cleaned)
+    query = parsed.query
+    if not query:
+        head = cleaned.split("#", 1)[0].lstrip("?")
+        if "=" not in head:
+            # Bare authorization code. No state to compare against.
+            out["code"] = head or None
+            out["bare_code"] = out["code"] is not None
+            return out
+        query = head
+
+    qs = urllib.parse.parse_qs(query)
+    for key in _RESULT_KEYS:
+        out[key] = qs.get(key, [None])[0]
+    return out
+
+
+def wait_for_callback(timeout: float, sink: dict | None = None) -> bool:
+    """Block until the local listener captures a callback, or the timeout hits.
+
+    Returns True if something was captured. False means fall back to a paste.
+    """
+    sink = captured if sink is None else sink
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if "code" in sink or "error" in sink:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def prompt_for_redirect_url(read_line=input) -> dict:
+    """Ask for the redirect URL the browser landed on and parse it."""
+    print(
+        "\nPaste the FULL URL from the browser's address bar after authorizing.\n"
+        "It looks like:\n"
+        f"  {REDIRECT_URI}?code=AQ...&state=...\n"
+        "The page itself will 404 — that is expected and fine; the query string\n"
+        "in the address bar is the whole point. A bare code also works, but then\n"
+        "the CSRF `state` cannot be verified.\n"
+    )
+    try:
+        raw = read_line("Redirect URL (or code): ")
+    except (EOFError, KeyboardInterrupt):
+        print("\nERROR: no input; aborting.", file=sys.stderr)
+        sys.exit(1)
+    return parse_pasted_redirect(raw)
+
+
+def resolve_authorization(result: dict, expected_state: str) -> str:
+    """Validate an authorization result and return the code, or exit non-zero.
+
+    Applies identically to a listener capture and to a pasted URL: an
+    ``error`` param aborts with the scope hint where relevant, and ``state``
+    must match the value this run generated. The only relaxation is the
+    bare-code paste, which carries no state and says so.
+    """
+    if result.get("error"):
+        detail = result.get("error_description") or result.get("error_reason") or ""
+        print(f"Authorization failed: {result['error']} {detail}".rstrip(), file=sys.stderr)
+        if is_scope_error(result["error"], detail) and "threads_delete" in SCOPES:
+            print(SCOPE_FALLBACK_HINT, file=sys.stderr)
+        sys.exit(1)
+
+    code = result.get("code")
+    if not code:
+        print(
+            "ERROR: no authorization code found in that input. Aborting.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if result.get("bare_code"):
+        print(
+            "WARNING: that was a bare code, not the full redirect URL, so the\n"
+            "CSRF `state` value could NOT be verified. Continuing. If you did not\n"
+            "just initiate this authorization yourself, stop and re-run.",
+            file=sys.stderr,
+        )
+    elif result.get("state") != expected_state:
+        print("ERROR: state mismatch; possible CSRF. Aborting.", file=sys.stderr)
+        sys.exit(1)
+
+    return code
+
+
 def _post_form(url: str, fields: dict) -> dict:
     data = urllib.parse.urlencode(fields).encode()
     req = urllib.request.Request(
@@ -206,41 +378,43 @@ def main() -> None:
         }
     )
 
-    server = http.server.HTTPServer(("127.0.0.1", PORT), CallbackHandler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # The listener is still the default and is tried first, but it can only
+    # ever fire for a loopback redirect URI. With a hosted HTTPS callback the
+    # browser lands on a remote web server and nothing arrives here.
+    loopback = is_loopback_redirect(REDIRECT_URI)
+    server = None
+    if loopback:
+        server = http.server.HTTPServer(("127.0.0.1", PORT), CallbackHandler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
 
     print("Opening browser to the Threads authorization page...")
     print(f"If it does not open automatically, visit:\n  {auth_url}\n")
     webbrowser.open(auth_url)
-    print(f"Waiting for redirect to {REDIRECT_URI} ...")
 
-    while "code" not in captured and "error" not in captured:
-        pass
-    server.shutdown()
+    result: dict | None = None
+    if loopback:
+        print(
+            f"Waiting up to {int(CALLBACK_TIMEOUT)}s for a redirect to {REDIRECT_URI} ..."
+        )
+        got_it = wait_for_callback(CALLBACK_TIMEOUT)
+        server.shutdown()
+        if got_it:
+            result = dict(captured)
+        else:
+            print("No callback arrived before the timeout.", file=sys.stderr)
+    else:
+        print(
+            f"Redirect URI {REDIRECT_URI} is not a loopback address, so the local\n"
+            "listener cannot catch it. Falling back to a manual paste."
+        )
 
-    if captured.get("error"):
-        detail = captured.get("error_description") or captured.get("error_reason") or ""
-        print(f"Authorization failed: {captured['error']} {detail}".rstrip(), file=sys.stderr)
-        if is_scope_error(captured["error"], detail) and "threads_delete" in SCOPES:
-            print(
-                "\nThis looks like an invalid-scope rejection, and the request\n"
-                "included `threads_delete` — a permission the use-case dashboard\n"
-                "offers but the authorize documentation does not list.\n\n"
-                "Re-run without it:\n\n"
-                f'    export THREADS_SCOPES="{FALLBACK_SCOPES}"\n'
-                "    python bootstrap.py\n\n"
-                "If that succeeds, `delete_post` will 403 at runtime. Either drop\n"
-                "it from the tool surface or document it as expected-to-fail —\n"
-                "do not ship a tool that silently does nothing.",
-                file=sys.stderr,
-            )
-        sys.exit(1)
-    if captured.get("state") != state:
-        print("ERROR: state mismatch; possible CSRF. Aborting.", file=sys.stderr)
-        sys.exit(1)
+    if result is None:
+        result = prompt_for_redirect_url()
+
+    code = resolve_authorization(result, state)
 
     print("Got authorization code. Exchanging for a short-lived token...")
-    short = exchange_code_for_short_token(app_id, app_secret, captured["code"])
+    short = exchange_code_for_short_token(app_id, app_secret, code)
     short_token = short.get("access_token")
     if not short_token:
         print("ERROR: no access_token in the short-lived response.", file=sys.stderr)
