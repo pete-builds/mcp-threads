@@ -24,6 +24,11 @@ away from every other test.
 The positive controls build the server the loopback way and prove the same
 probe reports 421 there, so a 200 here is evidence rather than a probe that
 cannot fail.
+
+HTTP needs a bearer token, so every boot sets a fake ``MCP_AUTH_TOKEN`` and the
+probe presents it. Without one ``server`` refuses to import and there is no app
+to probe; ``tests/test_auth_required.py`` covers that refusal. The same LAN
+request with no ``Authorization`` header is recorded too and must be 401.
 """
 
 from __future__ import annotations
@@ -42,6 +47,8 @@ LAN_IP = "192.168.86.20"
 BRIDGE_IP = "172.17.0.2"
 PORT = 3726
 REPO = Path(__file__).resolve().parent.parent
+#: Obviously fake. The server only compares it with what the probe presents.
+TOKEN = "test-token-not-a-secret"
 
 _PROBE = r"""
 import asyncio, json, sys
@@ -59,7 +66,7 @@ import server
 server.main()
 
 app = captured["app"]
-lan_ip, bridge_ip, port = sys.argv[1], sys.argv[2], int(sys.argv[3])
+lan_ip, bridge_ip, port, token = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 init = {
     "jsonrpc": "2.0",
     "id": 1,
@@ -95,7 +102,8 @@ async def main():
         # address uvicorn reports for the accepted socket. The Host header is
         # what the client typed.
         transport = httpx.ASGITransport(app=app)
-        lan_host = {**headers, "host": f"{lan_ip}:{port}"}
+        no_token = {**headers, "host": f"{lan_ip}:{port}"}
+        lan_host = {**no_token, "authorization": f"Bearer {token}"}
         paths = {
             "direct": f"http://{lan_ip}:{port}",
             "docker": f"http://{bridge_ip}:{port}",
@@ -103,8 +111,10 @@ async def main():
         for name, base in paths.items():
             async with httpx.AsyncClient(transport=transport, base_url=base) as client:
                 resp = await client.post("/mcp", json=init, headers=lan_host)
+                anonymous = await client.post("/mcp", json=init, headers=no_token)
             out[f"{name}_status"] = resp.status_code
             out[f"{name}_body"] = resp.text[:120]
+            out[f"{name}_no_token_status"] = anonymous.status_code
     print("PROBE_RESULT " + json.dumps(out))
 
 asyncio.run(main())
@@ -120,6 +130,7 @@ def _boot(**env_overrides: str) -> dict:
     env.update(
         {
             "MCP_PORT": str(PORT),
+            "MCP_AUTH_TOKEN": TOKEN,
             "FASTMCP_SHOW_SERVER_BANNER": "false",
             "FASTMCP_CHECK_FOR_UPDATES": "off",
             "PYTHONPATH": str(REPO),
@@ -127,7 +138,7 @@ def _boot(**env_overrides: str) -> dict:
     )
     env.update(env_overrides)
     proc = subprocess.run(
-        [sys.executable, "-c", _PROBE, LAN_IP, BRIDGE_IP, str(PORT)],
+        [sys.executable, "-c", _PROBE, LAN_IP, BRIDGE_IP, str(PORT), TOKEN],
         cwd=REPO,
         env=env,
         capture_output=True,
@@ -151,6 +162,14 @@ def test_lan_host_header_is_served_not_421(path: str) -> None:
     result = _boot()
     assert result[f"{path}_status"] != 421, result
     assert result[f"{path}_status"] == 200, result
+
+
+@pytest.mark.parametrize("path", ["direct", "docker"])
+def test_lan_client_without_a_token_is_401(path: str) -> None:
+    """The app ``run_server`` hands uvicorn turns away a LAN client that
+    presents no bearer token, on both of the paths that serve one with it."""
+    result = _boot()
+    assert result[f"{path}_no_token_status"] == 401, result
 
 
 def test_idle_sessions_are_reaped() -> None:

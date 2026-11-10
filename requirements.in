@@ -6,4 +6,4 @@ pydantic==2.14.2
 pydantic-settings==2.16.2
 # Pinned to an immutable commit tarball until pete-mcp-core is on PyPI.
 # Revert to a normal pinned version once it publishes.
-pete-mcp-core @ https://github.com/pete-builds/pete-mcp-core/archive/15d210625cfcf1840b6b6e95cf10990214585104.tar.gz
+pete-mcp-core @ https://github.com/pete-builds/pete-mcp-core/archive/18f22618723b38493fb20039083c68f014cafb2e.tar.gz

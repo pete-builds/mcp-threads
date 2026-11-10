@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import sys
 from contextlib import asynccontextmanager
+from typing import Literal
 
 import fastmcp
 from dotenv import load_dotenv
@@ -40,10 +41,18 @@ from tools.token import register_token_tools
 load_dotenv()
 
 DEFAULT_PORT = 3726
-VERSION = "0.2.0"
+# This server is built to run as a long-lived HTTP service, so HTTP is what it
+# serves when MCP_TRANSPORT is unset. The shared library defaults to stdio.
+DEFAULT_TRANSPORT = "streamable-http"
+VERSION = "0.3.0"
 
 
 class ThreadsSettings(BaseCoreSettings):
+    # Redeclared only to change the default, so ``settings.transport`` names the
+    # transport ``run_server`` will actually pick when MCP_TRANSPORT is unset.
+    # The bearer-token requirement below is decided from it.
+    transport: Literal["stdio", "streamable-http"] = DEFAULT_TRANSPORT
+
     threads_app_id: str = Field(
         default="",
         validation_alias=AliasChoices("THREADS_APP_ID", "MCP_THREADS_APP_ID"),
@@ -153,7 +162,12 @@ mcp = FastMCP(
     auth=build_auth_provider(
         settings.auth_token,
         client_id="threads",
-        required=settings.auth_required,
+        # HTTP never runs without a bearer token: with none set this raises
+        # AuthRequiredError here, at import, before anything listens. stdio is a
+        # local pipe with no network surface, so it needs no token. Setting
+        # MCP_AUTH_REQUIRED=false does not open HTTP either: run_server refuses
+        # to start a network transport that has no auth provider.
+        required=settings.auth_required and settings.transport == "streamable-http",
         logger=log,
     ),
 )
@@ -182,7 +196,7 @@ def main() -> None:
     run_server(
         mcp,
         default_port=DEFAULT_PORT,
-        default_transport="streamable-http",
+        default_transport=DEFAULT_TRANSPORT,
         default_host="0.0.0.0",
     )
 

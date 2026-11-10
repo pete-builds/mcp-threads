@@ -15,13 +15,21 @@ services:
     #
     # To build from source instead, comment out `image:` and uncomment
     # `build: .` locally.
-    image: ghcr.io/pete-builds/mcp-threads:0.2.2
+    image: ghcr.io/pete-builds/mcp-threads:0.3.0
     # build: .
     container_name: mcp-threads
     restart: unless-stopped
     # Host networking: the nix1 Docker bridge IP pool is exhausted. On any
     # other host, drop this and use `ports: ["3726:3726"]` instead.
     network_mode: host
+    # .env must hold MCP_AUTH_TOKEN before this image starts. From 0.3.0 the
+    # server refuses to start on HTTP without a bearer token: the container
+    # exits non-zero with "Bearer token required" in its log and, under
+    # `restart: unless-stopped`, keeps restarting until the token is there.
+    # Generate one with
+    #   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+    # and put it in .env on the host (chmod 600). Never in this file, never in
+    # git. Clients send it as `Authorization: Bearer <token>`.
     env_file:
       - .env
     environment:
@@ -35,6 +43,8 @@ services:
       # near-expiry or unseeded token still reports healthy — a restart cannot
       # renew a token, and failing here would drop the MCP transport *because*
       # the server warned. Uptime Kuma polls /healthz for the credential state.
+      # /healthz is also outside the bearer-token check, so this probe needs no
+      # token and keeps passing with auth on.
       MCP_HEALTH_PATH: /healthz
       THREADS_DATA_DIR: /data
       TZ: "${TZ:-America/New_York}"

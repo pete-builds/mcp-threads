@@ -35,6 +35,10 @@ jobs:
           THREADS_APP_ID: test-app
           THREADS_APP_SECRET: test-secret
           THREADS_DATA_DIR: /tmp/threads-data
+          # HTTP is the default transport and it refuses to load without a
+          # bearer token, so the smoke has to make a choice. A fake token
+          # keeps this the HTTP wiring, the one that ships.
+          MCP_AUTH_TOKEN: test-token-not-a-secret
         run: |
           python -c "
           import asyncio, server
