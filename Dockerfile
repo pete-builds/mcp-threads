@@ -48,8 +48,12 @@ USER mcp
 VOLUME ["/data"]
 EXPOSE 3726
 
-ENV MCP_HEALTH_PATH=/mcp
-
+# No MCP_HEALTH_PATH here on purpose. healthcheck.py probes /healthz unless
+# told otherwise, and /healthz sits outside the bearer-token check, so the
+# tokenless probe keeps passing with auth on. This image used to set
+# MCP_HEALTH_PATH=/mcp, which made a bare `docker run` probe the MCP transport
+# and open a session on every check. tests/test_auth_required.py reads this
+# file and fails if a transport path comes back.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s \
     CMD python healthcheck.py || exit 1
 

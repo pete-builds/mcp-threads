@@ -175,15 +175,34 @@ Three hosts are involved, which is not a typo — authorize on `threads.net`, th
 
 ```bash
 cp .env.example .env   # fill in THREADS_APP_ID, THREADS_APP_SECRET, THREADS_SEED_TOKEN
+chmod 600 .env
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # paste the output into MCP_AUTH_TOKEN
 docker compose up -d
 ```
 
+**`MCP_AUTH_TOKEN` is required.** The server will not start on HTTP without a bearer token, and no setting runs it open. See [Bearer token](#bearer-token).
+
 The seed is consumed on first boot and written to the `threads-data` volume. After that the volume is authoritative and the `.env` value goes stale — that is expected, not a bug. **Deleting the volume destroys the credential permanently** and forces a `bootstrap.py` re-run.
 
-Register with an MCP client:
+Register with an MCP client, passing the same token as a header:
 
 ```bash
-claude mcp add threads --transport http --scope user --url http://<host>:3726/mcp
+claude mcp add --transport http --scope user threads http://<host>:3726/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+Or as a client config entry:
+
+```json
+{
+  "mcpServers": {
+    "threads": {
+      "type": "http",
+      "url": "http://<host>:3726/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
 ```
 
 Then **start a new session**. MCP clients enumerate tools at startup, so a
@@ -204,9 +223,23 @@ server and is not one.
 | `THREADS_GRANTED_SCOPES` | the five granted scopes | Comma list used for the pre-flight scope check. Empty disables it. |
 | `MCP_PORT` | `3726` | Bind port. |
 | `MCP_HOST` | `0.0.0.0` | Bind host. |
-| `MCP_TRANSPORT` | `streamable-http` | Transport. |
-| `MCP_AUTH_TOKEN` | unset | Optional bearer token for the HTTP transport. |
+| `MCP_TRANSPORT` | `streamable-http` | Transport. `stdio` is for local development and needs no bearer token. |
+| `MCP_AUTH_TOKEN` | (none) | **Required for HTTP.** Bearer token every client must send. The server refuses to start without it. |
 | `MCP_HEALTH_PATH` | `/healthz` | Path the **container** healthcheck probes. Do not point it at `/mcp` — see [Monitoring](#monitoring-get-healthz). |
+
+## Bearer token
+
+Every tool here can read or post to a public account, so the HTTP transport is closed to anyone who does not hold the token.
+
+- **Required, with no opt-out.** With `MCP_AUTH_TOKEN` unset or blank, the server raises `Bearer token required for client 'threads' but not provided` and exits non-zero before it listens on anything. Under `restart: unless-stopped` the container keeps restarting until the token is in place. `MCP_AUTH_REQUIRED=false` does not change this: the server then refuses with `Refusing to start streamable-http with no auth provider`.
+- **Generate it:** `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+- **Where it goes:** `MCP_AUTH_TOKEN=` in `.env` on the host, mode 600. Never in `docker-compose.yml`, never in git.
+- **What clients send:** `Authorization: Bearer <token>` on every request to `/mcp`. A missing or wrong token gets `401`.
+- **What stays open:** `GET /healthz`, on purpose. It carries no credential material, the monitor has to be able to poll it, and the container healthcheck probes it without a token.
+- **Rotating it:** change the value in `.env`, recreate the container (`docker compose up -d --force-recreate`), then update the header in every client. The old token stops working at the restart.
+- **stdio:** `MCP_TRANSPORT=stdio python server.py` starts with no bearer token, because a local pipe has no network surface. It still needs `THREADS_APP_ID` and `THREADS_APP_SECRET`.
+
+This is separate from the Threads credential. `MCP_AUTH_TOKEN` decides who may call this server; the Threads token on the volume is what the server itself presents to Meta.
 
 ## Monitoring: `GET /healthz`
 
@@ -232,7 +265,7 @@ curl -i http://<host>:3726/healthz
   "detail": "token healthy",
   "expires_at": "2026-10-11T14:03:22+00:00",
   "refresh_count": 3,
-  "version": "0.2.0"
+  "version": "0.3.0"
 }
 ```
 
@@ -241,7 +274,7 @@ Notes:
 - **Unseeded is 503 on purpose.** A server with no credential is not serving; the monitor should say so rather than showing green.
 - `days_remaining` is floored to whole days and the threshold is applied to that floored value, so the body and the status code can never disagree. Alerting can therefore fire up to a day early (14.9 days reads as 14). Proactive refresh runs at day 45 (15 days remaining), so reaching this endpoint's warning state already means refresh has stopped working.
 - **No secret material in the body under any state.** Every field is an integer, an ISO timestamp, or a value from a closed vocabulary; `token_source` is clamped to `seed` / `refresh` / `null` so nothing read out of the token file is echoed back. `tests/test_health.py` asserts the token and every prefix of it are absent in each state, including the corrupt-file path.
-- **Unauthenticated by design.** FastMCP wraps only `/mcp` in the bearer-auth middleware; custom routes sit outside it. That is what makes the endpoint pollable, and it is safe because the body carries no credential material.
+- **Unauthenticated by design.** FastMCP wraps only `/mcp` in the bearer-auth middleware; custom routes sit outside it. That is what makes the endpoint pollable with the [bearer token](#bearer-token) required everywhere else, and it is safe because the body carries no credential material.
 - **The container healthcheck probes this path too, but reads it differently.** Docker restarts a container that fails `HEALTHCHECK`, and a restart cannot renew a credential, so a probe that failed on 503 would restart-loop a server whose only problem is an expiring token. The shim therefore treats `401` and `503` as alive: "the app answered" is the liveness signal. `500` is deliberately excluded, so a genuine fault still fails. Uptime Kuma accepts only `200-299` and is what actually alerts you.
 - **Never point the container healthcheck at `/mcp`.** A bare request to the MCP mount allocates a transport session that is never reaped, roughly 40 KB each, before method dispatch and before auth. At a 30-second interval that is about 115 MiB/day of permanent growth. Measured: 300 probes against `/mcp` cost 11 MiB, 300 against `/healthz` cost 0.
 
@@ -262,6 +295,14 @@ uv venv .venv && uv pip install -r requirements-dev.in --python .venv/bin/python
 .venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check .
 ```
+
+To run it locally over stdio, with no bearer token:
+
+```bash
+THREADS_APP_ID=... THREADS_APP_SECRET=... THREADS_DATA_DIR=./data MCP_TRANSPORT=stdio .venv/bin/python server.py
+```
+
+Without `MCP_TRANSPORT=stdio` the server picks HTTP and refuses to start until `MCP_AUTH_TOKEN` is set.
 
 Regenerate the hash-pinned lockfile (must be universal — a macOS-only resolution omits Linux transitives and the image build fails on `--require-hashes`):
 

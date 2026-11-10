@@ -17,8 +17,10 @@ this server needs two things ``main()`` cannot express:
    restart loop that drops the MCP transport. Here "responds at all" means
    alive; Uptime Kuma polls ``/healthz`` directly for the credential state.
 
-401 is included for the same reason: with ``MCP_AUTH_REQUIRED=true`` an
-unauthenticated probe is rejected by a server that is serving correctly.
+401 is included for the same reason: HTTP always requires a bearer token and
+the probe carries none, so a 401 comes from a server that is serving
+correctly. ``/healthz`` is mounted outside that check and does not answer 401
+today; the code is here so the container stays up if that ever changes.
 
 Env precedence for the port matches ``pete_mcp_core.serve`` exactly
 (``FASTMCP_PORT`` > ``MCP_PORT`` > default) so the probe can never target a

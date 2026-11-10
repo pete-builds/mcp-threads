@@ -11,8 +11,11 @@ credential material — see :mod:`clients.health`.
 
 **Not the container healthcheck.** Docker restarts a container that fails its
 healthcheck, and a restart cannot renew an expiring token, so wiring this to
-``HEALTHCHECK`` would turn a warning into a restart loop. The container probe
-stays on ``/mcp`` (liveness); this endpoint is credential health.
+``HEALTHCHECK`` on its status code would turn a warning into a restart loop.
+The container probe does request this path, because it opens no transport
+session and needs no bearer token, but ``healthcheck.py`` reads any answer
+from it, 503 included, as alive. This endpoint is credential health for the
+monitor; liveness is only that it answered.
 """
 
 from __future__ import annotations
