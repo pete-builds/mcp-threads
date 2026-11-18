@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import urllib.parse
 
+import pytest
+
 import bootstrap
 
 
@@ -138,3 +140,153 @@ def test_redirect_uri_is_overridable_for_a_rewritten_dashboard_value(monkeypatch
     finally:
         monkeypatch.delenv("THREADS_REDIRECT_URI", raising=False)
         importlib.reload(bootstrap)
+
+
+# ---------------------------------------------------------------------------
+# Manual paste fallback.
+#
+# Meta rejects a plain-http loopback redirect URI (error 1349187, "Insecure
+# Login Blocked"), so the registered URI is a hosted HTTPS URL and the local
+# listener can never fire. These pin the paste path, and specifically that it
+# is not a security downgrade: `state` is still enforced.
+# ---------------------------------------------------------------------------
+
+
+def test_loopback_detection_picks_the_right_path():
+    assert bootstrap.is_loopback_redirect("http://127.0.0.1:8766/callback") is True
+    assert bootstrap.is_loopback_redirect("http://localhost:8766/callback") is True
+    assert (
+        bootstrap.is_loopback_redirect("https://brooksnewmedia.com/threads-callback")
+        is False
+    )
+
+
+def test_full_url_paste_yields_code_and_state():
+    result = bootstrap.parse_pasted_redirect(
+        "https://brooksnewmedia.com/threads-callback?code=AQBx-123&state=st-abc#_"
+    )
+    assert result["code"] == "AQBx-123"
+    assert result["state"] == "st-abc"
+    assert result["bare_code"] is False
+    assert result["error"] is None
+    # And it flows straight into the existing exchange path.
+    assert bootstrap.resolve_authorization(result, "st-abc") == "AQBx-123"
+
+
+def test_full_url_paste_survives_surrounding_whitespace_and_quotes():
+    result = bootstrap.parse_pasted_redirect(
+        '  "https://brooksnewmedia.com/threads-callback?code=AQBx-123&state=st-abc"  '
+    )
+    assert result["code"] == "AQBx-123"
+    assert result["state"] == "st-abc"
+
+
+def test_bare_code_paste_is_accepted_but_flagged_as_unverified(capsys):
+    result = bootstrap.parse_pasted_redirect("AQBx-123#_")
+    assert result["code"] == "AQBx-123"
+    assert result["state"] is None
+    assert result["bare_code"] is True
+
+    # No state to compare, so it must not be rejected for mismatching...
+    assert bootstrap.resolve_authorization(result, "st-abc") == "AQBx-123"
+    # ...but it must say so, loudly, on stderr.
+    err = capsys.readouterr().err
+    assert "state" in err.lower()
+    assert "not be verified" in err.lower()
+
+
+def test_pasted_state_mismatch_is_rejected(capsys):
+    """The CSRF check is enforced on pasted input exactly as on the listener."""
+    result = bootstrap.parse_pasted_redirect(
+        "https://brooksnewmedia.com/threads-callback?code=AQBx-123&state=attacker"
+    )
+    with pytest.raises(SystemExit) as exc:
+        bootstrap.resolve_authorization(result, "st-abc")
+    assert exc.value.code == 1
+    assert "state mismatch" in capsys.readouterr().err.lower()
+
+
+def test_pasted_error_params_surface_with_the_scope_hint(capsys):
+    result = bootstrap.parse_pasted_redirect(
+        "https://brooksnewmedia.com/threads-callback"
+        "?error=invalid_request&error_description=Invalid+scope%3A+threads_delete"
+    )
+    assert result["error"] == "invalid_request"
+    assert result["error_description"] == "Invalid scope: threads_delete"
+
+    with pytest.raises(SystemExit) as exc:
+        bootstrap.resolve_authorization(result, "st-abc")
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "Authorization failed: invalid_request" in err
+    assert bootstrap.FALLBACK_SCOPES in err  # the existing re-run hint
+
+
+def test_pasted_non_scope_error_skips_the_scope_hint(capsys):
+    result = bootstrap.parse_pasted_redirect(
+        "https://brooksnewmedia.com/threads-callback"
+        "?error=access_denied&error_reason=user_denied"
+    )
+    with pytest.raises(SystemExit):
+        bootstrap.resolve_authorization(result, "st-abc")
+    err = capsys.readouterr().err
+    assert "access_denied" in err
+    assert bootstrap.FALLBACK_SCOPES not in err
+
+
+def test_empty_paste_is_rejected_rather_than_exchanged(capsys):
+    result = bootstrap.parse_pasted_redirect("   ")
+    with pytest.raises(SystemExit) as exc:
+        bootstrap.resolve_authorization(result, "st-abc")
+    assert exc.value.code == 1
+    assert "no authorization code" in capsys.readouterr().err.lower()
+
+
+def test_bare_query_string_paste_still_checks_state():
+    """Pete may copy only the query, not the whole URL. Still not a bare code."""
+    result = bootstrap.parse_pasted_redirect("?code=AQBx-123&state=st-abc")
+    assert result["bare_code"] is False
+    assert result["code"] == "AQBx-123"
+    assert bootstrap.resolve_authorization(result, "st-abc") == "AQBx-123"
+    with pytest.raises(SystemExit):
+        bootstrap.resolve_authorization(result, "different")
+
+
+def test_prompt_reads_stdin_and_parses_it(monkeypatch):
+    result = bootstrap.prompt_for_redirect_url(
+        read_line=lambda _prompt: (
+            "https://brooksnewmedia.com/threads-callback?code=AQBx-123&state=st-abc"
+        )
+    )
+    assert result["code"] == "AQBx-123"
+    assert result["state"] == "st-abc"
+
+
+def test_prompt_aborts_on_eof(capsys):
+    def raise_eof(_prompt):
+        raise EOFError
+
+    with pytest.raises(SystemExit) as exc:
+        bootstrap.prompt_for_redirect_url(read_line=raise_eof)
+    assert exc.value.code == 1
+    assert "no input" in capsys.readouterr().err.lower()
+
+
+def test_listener_wait_times_out_instead_of_spinning_forever():
+    """The old busy-wait could never fall through to the paste prompt."""
+    assert bootstrap.wait_for_callback(0.05, sink={}) is False
+    assert bootstrap.wait_for_callback(5.0, sink={"code": "AQBx-123"}) is True
+    assert bootstrap.wait_for_callback(5.0, sink={"error": "access_denied"}) is True
+
+
+def test_loopback_listener_is_still_the_default_path():
+    """Nothing regresses if a loopback URI ever becomes usable again."""
+    import importlib
+    import os
+
+    assert "THREADS_REDIRECT_URI" not in os.environ
+    fresh = importlib.reload(bootstrap)
+    assert fresh.REDIRECT_URI.startswith("http://127.0.0.1:")
+    assert fresh.REDIRECT_URI.endswith("/callback")
+    assert str(fresh.PORT) in fresh.REDIRECT_URI
+    assert fresh.is_loopback_redirect(fresh.REDIRECT_URI) is True
