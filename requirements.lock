@@ -27,9 +27,9 @@ attrs==26.1.0 \
     #   jsonschema
     #   jsonschema-path
     #   referencing
-authlib==1.9.8 \
-    --hash=sha256:879735216a0b805a4dfedb4fdd19e7d75ebb8debd70cc7566da9d813db34458d \
-    --hash=sha256:de0b0138d398d0058f3139d8332bc8f674143dca0b446116ff285c7f417a4f7e
+authlib==1.9.9 \
+    --hash=sha256:0199649865fefb4304fc57683eaebb15614523073e41e09d98c72f3268ce5cbc \
+    --hash=sha256:cca3dffa51c8d80d6df19aee2279e47219dc996f5a527c06ac2e39d0757c99ef
     # via fastmcp-slim
 beartype==0.23.1 \
     --hash=sha256:4461b4dc57e3fdd6c8a8464b22cf118002eea107c33e9fef651c69068ab3cce3 \
@@ -37,9 +37,9 @@ beartype==0.23.1 \
     # via
     #   fastmcp-slim
     #   py-key-value-aio
-cachetools==8.0.0 \
-    --hash=sha256:5af562e5078f0086771a1e3832a9c3dbf5d336b6e2794a2c12a64680a4c9087d \
-    --hash=sha256:5ed01bd676800d51f0025605e4fd8ad0891550513e7b0a4c3da478463764e5c3
+cachetools==8.0.2 \
+    --hash=sha256:30ac523adfc118b51d2b2e7bad8a0ddb31370dfe2700c7f10ca224f36ccf81e0 \
+    --hash=sha256:502bf3c17c6e35d78ccdaa70da8c7001b28634541f5cde0dee33c93bb252277d
     # via py-key-value-aio
 caio==0.12.10 \
     --hash=sha256:1140246b2bdd2e46c33826464fee66cc2244345e38462d96b8055081acca213e \
@@ -397,9 +397,9 @@ pathable==0.6.0 \
 pete-mcp-core @ https://github.com/pete-builds/pete-mcp-core/archive/18f22618723b38493fb20039083c68f014cafb2e.tar.gz \
     --hash=sha256:f5d9f52b9acc91d2354c11deb657f95afeb124709954b0b929c2b5cce71596c0
     # via -r requirements.in
-platformdirs==4.14.5 \
-    --hash=sha256:32e9921db7385aa8169bee4fe9501923e5715ba9fb7ea3b9c69b0d8e0639f7a1 \
-    --hash=sha256:8e778c6fa421516f4d3369449f8df3b0e1b72c0e0005fe88e3ec772d0a14e750
+platformdirs==4.14.7 \
+    --hash=sha256:391513b74707c42335fff3ea17eaac657a7ee9ffcadd809634d34ea594d0122c \
+    --hash=sha256:5472257c1cf97a14658af52997011c7e59e4aebf3a24950b973c11b579e1b074
     # via fastmcp-slim
 py-key-value-aio==0.4.6 \
     --hash=sha256:267c03c3e24cb99d3097612f8a5cfd8e11785c6a2975e272db0e303ea1850bfd \
@@ -884,9 +884,9 @@ typing-inspection==0.4.5 \
     #   mcp
     #   pydantic
     #   pydantic-settings
-uncalled-for==0.6.1 \
-    --hash=sha256:1e8f86f972684db50f2888f07caa87d81a431584fa77856660e0c5e89f1cc778 \
-    --hash=sha256:49d9a55a806529dbb844f64a2e3adc8f44ad0b0802f5d91381a09c088c44e144
+uncalled-for==0.6.2 \
+    --hash=sha256:58835db667a85408c7b6d6ad8dfdd74d7713d3be669b46396ba3d2c6a889242d \
+    --hash=sha256:bcac08897ceb7113b52e6c8070eead4da1610ae23e6e0d0e9f2a6c4bba7905cb
     # via fastmcp-slim
 uvicorn==0.54.0 \
     --hash=sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf \
