@@ -37,9 +37,9 @@ beartype==0.23.1 \
     # via
     #   fastmcp-slim
     #   py-key-value-aio
-cachetools==8.0.2 \
-    --hash=sha256:30ac523adfc118b51d2b2e7bad8a0ddb31370dfe2700c7f10ca224f36ccf81e0 \
-    --hash=sha256:502bf3c17c6e35d78ccdaa70da8c7001b28634541f5cde0dee33c93bb252277d
+cachetools==8.0.3 \
+    --hash=sha256:08bc12eeb7c7ab68abbe2d64d07fd7923ff532e32ff04ae27d22add1c5e8a5f9 \
+    --hash=sha256:79245d0d90464e29355f13658cd769e57d98ed06242d3c6fbd71796ca0938ef9
     # via py-key-value-aio
 caio==0.12.10 \
     --hash=sha256:1140246b2bdd2e46c33826464fee66cc2244345e38462d96b8055081acca213e \
@@ -263,9 +263,9 @@ cryptography==50.0.2 \
     #   authlib
     #   joserfc
     #   pyjwt
-cyclopts==5.5.2 \
-    --hash=sha256:4fbe863ebace1c65dafc6520c82217915b103d27fbd1d8fcd168f2abcca3a12a \
-    --hash=sha256:c0339b7ddd7b1c886f13bb8b68a6a65aa7144d3027f1d0e290be514b8fe1589b
+cyclopts==5.5.3 \
+    --hash=sha256:61c5713c34fe161430bae6ced2de0ed29b60d0893ac0d9c3490a77aa8899068d \
+    --hash=sha256:784ddcc8847f69f96e6ff1b4222c8939ba8f47cea516b8eafb8f56c4a4fa5900
     # via fastmcp-slim
 dnspython==2.9.2 \
     --hash=sha256:8d4d39a513e649d634004ce4d39ade2352efcea472a0247535a5c2d18a9d7ba9 \
