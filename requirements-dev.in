@@ -2,7 +2,7 @@
 pytest==9.2.0
 pytest-asyncio==1.5.0
 respx==0.23.1
-ruff==0.17.5
+ruff==0.17.6
 # Imported directly by the tests that read docker-compose.yml. Same version the
 # lock already resolves for the runtime.
-pyyaml==6.0.3
+pyyaml==6.0.4
